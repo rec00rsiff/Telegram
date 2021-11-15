@@ -1593,6 +1593,23 @@ public class ActionBarMenuItem extends FrameLayout {
         }
     }
 
+    public void hideSubItemAnimated(int id) {
+        if (popupLayout == null) {
+            return;
+        }
+        View view = popupLayout.findViewWithTag(id);
+        if (view != null && view.getVisibility() != GONE) {
+            view.animate().alpha(0).setDuration(500).setListener(new AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    super.onAnimationEnd(animation);
+                    view.setVisibility(View.GONE);
+                    measurePopup = true;
+                }
+            });
+        }
+    }
+
     public void hideAllSubItems() {
         if (popupLayout == null) {
             return;
@@ -1619,6 +1636,19 @@ public class ActionBarMenuItem extends FrameLayout {
         if (view != null && view.getVisibility() != VISIBLE) {
             view.setVisibility(VISIBLE);
             measurePopup = true;
+        }
+    }
+
+    public void showSubItemAnimated(int id) {
+        if (popupLayout == null) {
+            return;
+        }
+        View view = popupLayout.findViewWithTag(id);
+        if (view != null && view.getVisibility() != VISIBLE) {
+            view.setVisibility(View.VISIBLE);
+            view.setAlpha(0);
+            measurePopup = true;
+            view.animate().alpha(1).setDuration(500);
         }
     }
 

@@ -2947,6 +2947,11 @@ public class MessagesController extends BaseController implements NotificationCe
                         oldChat.participants_count = chat.participants_count;
                     }
                     addOrRemoveActiveVoiceChat(oldChat);
+
+                    if(oldChat.noforwards != chat.noforwards)
+                    {
+                        AndroidUtilities.runOnUIThread(() -> getNotificationCenter().postNotificationName(NotificationCenter.noforwardsUpdated, chat));
+                    }
                 }
             } else {
                 chats.put(chat.id, chat);
@@ -2988,6 +2993,11 @@ public class MessagesController extends BaseController implements NotificationCe
                     if (oldFlags != newFlags || oldFlags2 != newFlags2) {
                         AndroidUtilities.runOnUIThread(() -> getNotificationCenter().postNotificationName(NotificationCenter.channelRightsUpdated, chat));
                     }
+
+                    if(oldChat.noforwards != chat.noforwards)
+                    {
+                        AndroidUtilities.runOnUIThread(() -> getNotificationCenter().postNotificationName(NotificationCenter.noforwardsUpdated, chat));
+                    }
                 }
                 chats.put(chat.id, chat);
             } else if (oldChat == null) {
@@ -3023,6 +3033,11 @@ public class MessagesController extends BaseController implements NotificationCe
                     chat.flags |= 131072;
                 }
                 chats.put(chat.id, chat);
+
+                if(oldChat.noforwards != chat.noforwards)
+                {
+                    AndroidUtilities.runOnUIThread(() -> getNotificationCenter().postNotificationName(NotificationCenter.noforwardsUpdated, chat));
+                }
             }
             addOrRemoveActiveVoiceChat(chat);
         }
@@ -3410,6 +3425,17 @@ public class MessagesController extends BaseController implements NotificationCe
                     if (res.full_chat.stickerset != null) {
                         getMediaDataController().getGroupStickerSetById(res.full_chat.stickerset);
                     }
+
+                    if(res.full_chat != null) {
+                        TLRPC.Peer old_def_send_as = null;
+                        if(old != null) {
+                            old_def_send_as = old.default_send_as;
+                        }
+                        if (res.full_chat.default_send_as != old_def_send_as) {
+                            getNotificationCenter().postNotificationName(NotificationCenter.defaultSendAsUpdated, res.full_chat.default_send_as);
+                        }
+                    }
+
                     getNotificationCenter().postNotificationName(NotificationCenter.chatInfoDidLoad, res.full_chat, classGuid, false, true);
                     if ((res.full_chat.flags & 2048) != 0) {
                         TLRPC.Dialog dialog = dialogs_dict.get(-chatId);
@@ -9088,6 +9114,52 @@ public class MessagesController extends BaseController implements NotificationCe
             }
             processUpdates((TLRPC.Updates) response, false);
         });
+    }
+
+    public void getSendAs(long chatId)
+    {
+        TLRPC.TL_channels_getSendAs req = new TLRPC.TL_channels_getSendAs();
+        req.peer = getInputPeer(-chatId);
+
+        getConnectionsManager().sendRequest(req, (response, error) -> {
+            if (response != null) {
+                TLRPC.TL_channels_sendAsPeers rpeers = (TLRPC.TL_channels_sendAsPeers)response;
+
+                putChats(rpeers.chats, false);
+                putUsers(rpeers.users, false);
+
+                AndroidUtilities.runOnUIThread(() -> getNotificationCenter().postNotificationName(NotificationCenter.sendAsPeersReceived, rpeers.peers));
+            }
+        }, ConnectionsManager.RequestFlagInvokeAfter);
+    }
+
+    public void saveDefSendAs(TLRPC.InputPeer sendas) {
+        TLRPC.TL_messages_saveDefaultSendAs req = new TLRPC.TL_messages_saveDefaultSendAs();
+        req.peer = getInputPeer(getUserConfig().getClientUserId());
+        req.send_as = sendas;
+        getConnectionsManager().sendRequest(req, (response, error) -> {
+            if (response != null) {
+                Log.e("mcontroller", "saved defaul send_as peer");
+            }
+            if(error != null) {
+                Log.e("mcontroller", "saveDefSendAs error");
+                Log.e("mcontroller", error.text + "  " + error.code);
+                Log.e("mcontroller", error.toString());
+                return;
+            }
+        }, ConnectionsManager.RequestFlagInvokeAfter);
+    }
+
+    public void toogleNoForwards(long chatId, boolean enabled) {
+        TLRPC.TL_messages_toggleNoForwards req = new TLRPC.TL_messages_toggleNoForwards();
+        req.peer = getInputPeer(-chatId);
+        req.enabled = enabled;
+        getConnectionsManager().sendRequest(req, (response, error) -> {
+            if (response != null) {
+                processUpdates((TLRPC.Updates) response, false);
+                AndroidUtilities.runOnUIThread(() -> getNotificationCenter().postNotificationName(NotificationCenter.updateInterfaces, UPDATE_MASK_CHAT));
+            }
+        }, ConnectionsManager.RequestFlagInvokeAfter);
     }
 
     public void toogleChannelSignatures(long chatId, boolean enabled) {

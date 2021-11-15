@@ -16,13 +16,20 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.Rect;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 
 import androidx.annotation.Keep;
+
+import android.text.TextUtils;
+import android.util.Log;
+import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -33,9 +40,11 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.ScrollView;
+import android.widget.TextView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
@@ -58,6 +67,7 @@ public class ActionBarPopupWindow extends PopupWindow {
     private boolean isClosingAnimated;
     private int currentAccount = UserConfig.selectedAccount;
     private boolean pauseNotifications;
+    public OnDismissListener c_dlistener;
     private long outEmptyTime = -1;
 
     static {
@@ -98,8 +108,10 @@ public class ActionBarPopupWindow extends PopupWindow {
         private int gapEndY = -1000000;
         private Rect bgPaddings = new Rect();
 
-        private ScrollView scrollView;
+        public ScrollView scrollView;
         protected LinearLayout linearLayout;
+
+        public TextView ttView;
 
         private int backgroundColor = Color.WHITE;
         protected Drawable backgroundDrawable;
@@ -107,15 +119,21 @@ public class ActionBarPopupWindow extends PopupWindow {
         private boolean fitItems;
         private final Theme.ResourcesProvider resourcesProvider;
 
+        public int modh = 0;
+
         public ActionBarPopupWindowLayout(Context context) {
             this(context, null);
         }
 
         public ActionBarPopupWindowLayout(Context context, Theme.ResourcesProvider resourcesProvider) {
-            this(context, R.drawable.popup_fixed_alert2, resourcesProvider);
+            this(context, R.drawable.popup_fixed_alert2, resourcesProvider, 0);
         }
 
-        public ActionBarPopupWindowLayout(Context context, int resId, Theme.ResourcesProvider resourcesProvider) {
+        public ActionBarPopupWindowLayout(Context context, Theme.ResourcesProvider resourcesProvider, int mods) {
+            this(context, R.drawable.popup_fixed_alert2, resourcesProvider, mods);
+        }
+
+        public ActionBarPopupWindowLayout(Context context, int resId, Theme.ResourcesProvider resourcesProvider, int mods) {
             super(context);
             this.resourcesProvider = resourcesProvider;
 
@@ -131,7 +149,44 @@ public class ActionBarPopupWindow extends PopupWindow {
             try {
                 scrollView = new ScrollView(context);
                 scrollView.setVerticalScrollBarEnabled(false);
-                addView(scrollView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
+                if(mods == 1) {
+                    TextView bottomOverlayText = new TextView(context);
+                    FrameLayout bottomOverlay = new FrameLayout(context) {
+                        @Override
+                        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                            int allWidth = MeasureSpec.getSize(widthMeasureSpec);
+                            FrameLayout.LayoutParams layoutParams = (FrameLayout.LayoutParams) bottomOverlayText.getLayoutParams();
+                            layoutParams.width = allWidth;
+                            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+                        }
+
+                        @Override
+                        public void onDraw(Canvas canvas) {
+                            int bottom = Theme.chat_composeShadowDrawable.getIntrinsicHeight();
+
+                            Paint p = new Paint();
+                            p.setColor(getThemedColor(Theme.key_actionBarDefaultSubmenuBackground));
+                            canvas.drawRect(10, -bottom * 2 - 100, getMeasuredWidth() - 10, getMeasuredHeight(), p);
+                        }
+                    };
+                    bottomOverlay.setWillNotDraw(false);
+                    bottomOverlay.setVisibility(View.VISIBLE);
+                    bottomOverlay.setClipChildren(false);
+
+                    bottomOverlayText.setText(LocaleController.getString("SendMsgAs", R.string.SendMsgAs));
+                    bottomOverlayText.setTextSize(AndroidUtilities.dp(8));
+                    bottomOverlayText.setTextColor(getThemedColor(Theme.key_chat_fieldOverlayText));
+                    bottomOverlayText.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
+                    bottomOverlayText.setPadding(AndroidUtilities.dp(17), 0, 0, 0);
+
+                    scrollView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+                    addView(scrollView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
+
+                    addView(bottomOverlay, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 59, Gravity.TOP));
+                    bottomOverlay.addView(bottomOverlayText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.CENTER));
+                } else{
+                    addView(scrollView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
+                }
             } catch (Throwable e) {
                 FileLog.e(e);
             }
@@ -153,7 +208,9 @@ public class ActionBarPopupWindow extends PopupWindow {
                             Object tag = view.getTag(R.id.width_tag);
                             Object tag2 = view.getTag(R.id.object_tag);
                             if (tag != null) {
-                                view.getLayoutParams().width = LayoutHelper.WRAP_CONTENT;
+                                if(modh == 0) {
+                                    view.getLayoutParams().width = LayoutHelper.WRAP_CONTENT;
+                                }
                             }
                             measureChildWithMargins(view, widthMeasureSpec, 0, heightMeasureSpec, 0);
                             if (!(tag instanceof Integer) && tag2 == null) {
@@ -161,8 +218,14 @@ public class ActionBarPopupWindow extends PopupWindow {
                                 continue;
                             } else if (tag instanceof Integer) {
                                 fixWidth = Math.max((Integer) tag, view.getMeasuredWidth());
-                                gapStartY = view.getMeasuredHeight();
-                                gapEndY = gapStartY + AndroidUtilities.dp(6);
+                                if(modh == 1) {
+                                    gapStartY = getMeasuredHeight() - AndroidUtilities.dp(56);
+                                    gapEndY = gapStartY + AndroidUtilities.dp(6);
+                                }
+                                else {
+                                    gapStartY = view.getMeasuredHeight();
+                                    gapEndY = gapStartY + AndroidUtilities.dp(6);
+                                }
                             }
                             if (viewsToFix == null) {
                                 viewsToFix = new ArrayList<>();
@@ -180,7 +243,7 @@ public class ActionBarPopupWindow extends PopupWindow {
             };
             linearLayout.setOrientation(LinearLayout.VERTICAL);
             if (scrollView != null) {
-                scrollView.addView(linearLayout, new ScrollView.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                scrollView.addView(linearLayout, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             } else {
                 addView(linearLayout, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT));
             }
@@ -308,6 +371,8 @@ public class ActionBarPopupWindow extends PopupWindow {
         public void addView(View child, LinearLayout.LayoutParams layoutParams) {
             linearLayout.addView(child, layoutParams);
         }
+
+        public View getvItemAt(int index) { return linearLayout.getChildAt(index); }
 
         public void removeInnerViews() {
             linearLayout.removeAllViews();
@@ -631,6 +696,10 @@ public class ActionBarPopupWindow extends PopupWindow {
 
     @Override
     public void dismiss() {
+        if(c_dlistener != null)
+        {
+            c_dlistener.onDismiss();
+        }
         dismiss(true);
     }
 

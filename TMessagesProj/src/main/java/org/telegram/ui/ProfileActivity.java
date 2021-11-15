@@ -46,6 +46,7 @@ import android.text.Spanned;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
+import android.util.Log;
 import android.util.Property;
 import android.util.SparseIntArray;
 import android.util.TypedValue;
@@ -80,8 +81,6 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager.widget.PagerAdapter;
 import androidx.viewpager.widget.ViewPager;
-
-import com.google.android.exoplayer2.util.Log;
 
 import org.telegram.PhoneFormat.PhoneFormat;
 import org.telegram.messenger.AndroidUtilities;
@@ -1561,7 +1560,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                             getMessagesController().blockPeer(userId);
                         } else {
                             getMessagesController().unblockPeer(userId);
-                            getSendMessagesHelper().sendMessage("/start", userId, null, null, null, false, null, null, null, true, 0, null);
+                            getSendMessagesHelper().sendMessage("/start", userId, null, null, null, false, null, null, null, true, 0, null, null);
                             finishFragment();
                         }
                     }
@@ -6240,7 +6239,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         presentFragment(new ChatActivity(args), true);
         removeSelfFromStack();
         TLRPC.User user = getMessagesController().getUser(userId);
-        getSendMessagesHelper().sendMessage(user, did, null, null, null, null, true, 0);
+        getSendMessagesHelper().sendMessage(user, did, null, null, null, null, true, 0, null);
     }
 
     @Override

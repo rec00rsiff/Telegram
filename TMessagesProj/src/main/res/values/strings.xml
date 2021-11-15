@@ -778,6 +778,8 @@
     <string name="EventLogToggledInvitesOff">un1 disabled group invites</string>
     <string name="EventLogToggledSignaturesOn">un1 enabled signatures</string>
     <string name="EventLogToggledSignaturesOff">un1 disabled signatures</string>
+    <string name="EventLogToggledNoForwardsOn">un1 enabled forward restrictions</string>
+    <string name="EventLogToggledNoForwardsOff">un1 disabled forward restrictions</string>
     <string name="EventLogRestrictedUntil">changed permissions for %1$s\n\nDuration: %2$s</string>
     <string name="EventLogDefaultPermissions">changed default permissions</string>
     <string name="EventLogRestrictedSendStickers">Send stickers &amp; GIFs</string>
@@ -3691,6 +3693,7 @@
     <string name="VoipGroupJoinAs">Join Voice Chat as...</string>
     <string name="VoipChannelJoinAs">Join Live Stream as...</string>
     <string name="VoipGroupDisplayAs">Display me as...</string>
+    <string name="SendMsgAs">Send message as...</string>
     <string name="VoipGroupStartAsInfo">Choose whether you want to be displayed as your personal account or as your channel.</string>
     <string name="VoipGroupStartAsInfoGroup">Choose whether you want to be displayed as your personal account, this group, or one of your channels.</string>
     <string name="VoipGroupContinueAs">Continue as %1$s</string>
@@ -4809,4 +4812,8 @@
     <string name="UserAcceptedToGroupAction">un1 was accepted into the group</string>
     <string name="UserAcceptedToGroupPush">%1$s was accepted into the group</string>
     <string name="UserAcceptedToGroupPushWithGroup">%2$s|%1$s was accepted into the group</string>
+    <string name="SavingContentHeader">Saving content</string>
+    <string name="SavingContentCheck">Restrict saving content</string>
+    <string name="SavingContentInfo">Participants won\'t be able to forward messages from this channel or save media files.</string>
+    <string name="ForwardsRestrictedError">Forwards from this group are restricted.</string>
 </resources>

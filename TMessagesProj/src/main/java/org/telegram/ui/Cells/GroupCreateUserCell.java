@@ -45,7 +45,7 @@ public class GroupCreateUserCell extends FrameLayout {
     private CheckBox2 checkBox;
     private AvatarDrawable avatarDrawable;
     private Object currentObject;
-    private CharSequence currentName;
+    public CharSequence currentName;
     private CharSequence currentStatus;
 
     private int checkBoxType;

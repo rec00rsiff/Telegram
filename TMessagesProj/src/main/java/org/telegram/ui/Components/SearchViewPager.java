@@ -404,9 +404,9 @@ public class SearchViewPager extends ViewPagerFixed implements FilteredSearchVie
                     for (int a = 0; a < dids.size(); a++) {
                         long did = dids.get(a);
                         if (message != null) {
-                            AccountInstance.getInstance(currentAccount).getSendMessagesHelper().sendMessage(message.toString(), did, null, null, null, true, null, null, null, true, 0, null);
+                            AccountInstance.getInstance(currentAccount).getSendMessagesHelper().sendMessage(message.toString(), did, null, null, null, true, null, null, null, true, 0, null, null);
                         }
-                        AccountInstance.getInstance(currentAccount).getSendMessagesHelper().sendMessage(fmessages, did, false,false, true, 0);
+                        AccountInstance.getInstance(currentAccount).getSendMessagesHelper().sendMessage(fmessages, did, false,false, true, 0, null);
                     }
                     fragment1.finishFragment();
                 } else {

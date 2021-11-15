@@ -15,6 +15,7 @@ import android.text.Editable;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
@@ -43,6 +44,7 @@ import org.telegram.ui.Cells.LoadingCell;
 import org.telegram.ui.Cells.RadioButtonCell;
 import org.telegram.ui.Cells.ShadowSectionCell;
 import org.telegram.ui.Cells.TextCell;
+import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Cells.TextInfoPrivacyCell;
 import org.telegram.ui.Cells.TextSettingsCell;
 import org.telegram.ui.Components.EditTextBoldCursor;
@@ -76,6 +78,10 @@ public class ChatEditTypeActivity extends BaseFragment implements NotificationCe
     private LinkActionView permanentLinkView;
     private TextCell manageLinksTextView;
     private TextInfoPrivacyCell manageLinksInfoCell;
+    private HeaderCell noforwardsHeaderCell;
+    private LinearLayout noforwardsContainer;
+    private TextCheckCell noforwardsCell;
+    private TextInfoPrivacyCell noforwardsInfoCell;
     private ShadowSectionCell sectionCell2;
     private TextInfoPrivacyCell infoCell;
     private TextSettingsCell textCell;
@@ -109,6 +115,8 @@ public class ChatEditTypeActivity extends BaseFragment implements NotificationCe
     private final static int done_button = 1;
     private InviteLinkBottomSheet inviteLinkBottomSheet;
 
+    private boolean noforwards = false;
+
     public ChatEditTypeActivity(long id, boolean forcePublic) {
         chatId = id;
         isForcePublic = forcePublic;
@@ -133,6 +141,7 @@ public class ChatEditTypeActivity extends BaseFragment implements NotificationCe
         }
         isPrivate = !isForcePublic && TextUtils.isEmpty(currentChat.username);
         isChannel = ChatObject.isChannel(currentChat) && !currentChat.megagroup;
+        noforwards = currentChat.noforwards;
         if (isForcePublic && TextUtils.isEmpty(currentChat.username) || isPrivate && currentChat.creator) {
             TLRPC.TL_channels_checkUsername req = new TLRPC.TL_channels_checkUsername();
             req.username = "1";
@@ -399,6 +408,28 @@ public class ChatEditTypeActivity extends BaseFragment implements NotificationCe
         manageLinksInfoCell = new TextInfoPrivacyCell(context);
         linearLayout.addView(manageLinksInfoCell, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
+        noforwardsContainer = new LinearLayout(context);
+        noforwardsContainer.setOrientation(LinearLayout.VERTICAL);
+        noforwardsContainer.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+        linearLayout.addView(noforwardsContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+        noforwardsHeaderCell = new HeaderCell(context, 23);
+        noforwardsContainer.addView(noforwardsHeaderCell);
+        noforwardsHeaderCell.setText(LocaleController.getString("SavingContentHeader", R.string.SavingContentHeader));
+
+        noforwardsCell = new TextCheckCell(context);
+        noforwardsCell.setBackgroundDrawable(Theme.getSelectorDrawable(false));
+        noforwardsCell.setTextAndCheck(LocaleController.getString("SavingContentCheck", R.string.SavingContentCheck), noforwards, false);
+        noforwardsContainer.addView(noforwardsCell);
+        noforwardsCell.setOnClickListener(v -> {
+            noforwards = !noforwards;
+            ((TextCheckCell) v).setChecked(noforwards);
+        });
+        noforwardsInfoCell = new TextInfoPrivacyCell(context);
+        noforwardsInfoCell.setText(LocaleController.getString("SavingContentInfo", R.string.SavingContentInfo));
+        noforwardsInfoCell.setBackground(Theme.getThemedDrawable(typeInfoCell.getContext(), R.drawable.greydivider_bottom, Theme.key_windowBackgroundGrayShadow));
+        linearLayout.addView(noforwardsInfoCell, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
         if (!isPrivate && currentChat.username != null) {
             ignoreTextChanges = true;
             usernameTextView.setText(currentChat.username);
@@ -435,6 +466,11 @@ public class ChatEditTypeActivity extends BaseFragment implements NotificationCe
 
     private void processDone() {
         if (trySetUsername()) {
+            if(noforwards != currentChat.noforwards)
+            {
+                currentChat.noforwards = noforwards;
+                getMessagesController().toogleNoForwards(chatId, noforwards);
+            }
             finishFragment();
         }
     }

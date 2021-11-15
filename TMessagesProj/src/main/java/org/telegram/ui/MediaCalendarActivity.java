@@ -1,25 +1,34 @@
 package org.telegram.ui;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.text.TextPaint;
 import android.util.Log;
+import android.util.Pair;
 import android.util.SparseArray;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.google.android.gms.vision.Frame;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.DownloadController;
@@ -47,6 +56,7 @@ import java.time.DayOfWeek;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Random;
 
 public class MediaCalendarActivity extends BaseFragment {
@@ -59,7 +69,16 @@ public class MediaCalendarActivity extends BaseFragment {
     TextPaint activeTextPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     TextPaint textPaint2 = new TextPaint(Paint.ANTI_ALIAS_FLAG);
 
+    public boolean isSelectable = false;
+
+    TextPaint selectorTextPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+
     Paint blackoutPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    Paint selectorHolPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    Paint selectorFPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    Paint selectorInnerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    Paint transparentPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private long dialogId;
     private boolean loading;
@@ -83,6 +102,11 @@ public class MediaCalendarActivity extends BaseFragment {
     private boolean isOpened;
     int selectedYear;
     int selectedMonth;
+
+    TextView bottomOverlayText;
+    TextView bottomOverlayTextR;
+
+    MonthView lastTouchedMonth;
 
     public MediaCalendarActivity(Bundle args, int photosVideosTypeFilter, int selectedDate) {
         super(args);
@@ -179,6 +203,53 @@ public class MediaCalendarActivity extends BaseFragment {
             }
         });
 
+        if(isSelectable) {
+            bottomOverlayText = new TextView(context);
+            bottomOverlayTextR = new TextView(context);
+
+            FrameLayout bottomOverlay = new FrameLayout(context) {
+                @Override
+                protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                    int allWidth = MeasureSpec.getSize(widthMeasureSpec);
+                    FrameLayout.LayoutParams layoutParams = (FrameLayout.LayoutParams) bottomOverlayText.getLayoutParams();
+                    layoutParams.width = allWidth;
+                    super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+                }
+
+                @Override
+                public void onDraw(Canvas canvas) {
+                    int bottom = Theme.chat_composeShadowDrawable.getIntrinsicHeight();
+                    Theme.chat_composeShadowDrawable.setBounds(0, 0, getMeasuredWidth(), bottom);
+                    Theme.chat_composeShadowDrawable.draw(canvas);
+                    canvas.drawRect(0, bottom, getMeasuredWidth(), getMeasuredHeight(), Theme.getThemePaint(Theme.key_paint_chatComposeBackground));
+                }
+            };
+            bottomOverlay.setWillNotDraw(false);
+            bottomOverlay.setPadding(0, AndroidUtilities.dp(1.5f), 0, 0);
+            bottomOverlay.setVisibility(View.VISIBLE);
+            bottomOverlay.setClipChildren(false);
+
+            contentView.addView(bottomOverlay, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 51, Gravity.BOTTOM));
+
+            bottomOverlayText.setText("SELECT DAYS");
+            bottomOverlayText.setTextSize(AndroidUtilities.dp(9));
+            bottomOverlayText.setTextColor(getThemedColor(Theme.key_chat_fieldOverlayText));
+            bottomOverlayText.setGravity(Gravity.CENTER);
+            bottomOverlay.addView(bottomOverlayText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.CENTER));
+
+            bottomOverlay.setOnClickListener(view -> {
+                switchState();
+            });
+
+            bottomOverlayTextR.setText("CLEAR HISTORY");
+            bottomOverlayTextR.setTextSize(AndroidUtilities.dp(9));
+            bottomOverlayTextR.setTextColor(getThemedColor(Theme.key_chat_reportSpam));
+            bottomOverlayTextR.setGravity(Gravity.CENTER);
+            bottomOverlay.addView(bottomOverlayTextR, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT, Gravity.CENTER));
+            bottomOverlayTextR.setVisibility(View.GONE);
+
+        }
+
         fragmentView = contentView;
 
         Calendar calendar = Calendar.getInstance();
@@ -199,6 +270,38 @@ public class MediaCalendarActivity extends BaseFragment {
         activeTextPaint.setColor(Color.WHITE);
         actionBar.setBackButtonImage(R.drawable.ic_ab_back);
         return fragmentView;
+    }
+
+    public int state = 0;
+
+    public void switchState() {
+        if(state == 0) {
+            state = 1;
+            bottomOverlayText.animate().alpha(0f).setDuration(200).setListener(new AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    super.onAnimationEnd(animation);
+                    //bottomOverlayText.setVisibility(View.GONE);
+                }
+            });
+
+            bottomOverlayTextR.setVisibility(View.VISIBLE);
+            bottomOverlayTextR.setAlpha(0f);
+            bottomOverlayTextR.animate().alpha(1f).setDuration(200);
+        }
+        else {
+            state = 0;
+            bottomOverlayTextR.animate().alpha(0f).setDuration(200).setListener(new AnimatorListenerAdapter() {
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    super.onAnimationEnd(animation);
+                    //bottomOverlayTextR.setVisibility(View.GONE);
+                }
+            });
+            bottomOverlayText.setVisibility(View.VISIBLE);
+            bottomOverlayText.setAlpha(0f);
+            bottomOverlayText.animate().alpha(1f).setDuration(200);
+        }
     }
 
     private void updateColors() {
@@ -353,6 +456,9 @@ public class MediaCalendarActivity extends BaseFragment {
         SparseArray<PeriodDay> messagesByDays = new SparseArray<>();
         SparseArray<ImageReceiver> imagesByDays = new SparseArray<>();
 
+        ArrayList<Integer> selectedDays = new ArrayList<>();
+        SparseArray<Pair<RectF, PeriodDay>> cboxesByDays = new SparseArray<>();
+
         SparseArray<PeriodDay> animatedFromMessagesByDays = new SparseArray<>();
         SparseArray<ImageReceiver> animatedFromImagesByDays = new SparseArray<>();
 
@@ -383,6 +489,14 @@ public class MediaCalendarActivity extends BaseFragment {
                         imagesByDays.valueAt(i).setParentView(null);
                     }
                     imagesByDays = null;
+                }
+
+                if(cboxesByDays != null) {
+                    cboxesByDays.clear();
+                }
+
+                if(selectedDays != null) {
+                    selectedDays.clear();
                 }
             }
             if (messagesByDays != null) {
@@ -463,27 +577,158 @@ public class MediaCalendarActivity extends BaseFragment {
         float pressedX;
         float pressedY;
 
+        int lastTouchedI = -1;
+        int startDelFromI = -1;
+
+        /*@Override
+        public void onLongPress(MotionEvent event){
+            for (int i = 0; i < cboxesByDays.size(); i++) {
+                Pair<RectF, PeriodDay> cboxesv = cboxesByDays.valueAt(i);
+                if (cboxesv.first.contains(event.getX(), event.getY())) {
+                    //ChatActivity fragment=new ChatActivity();
+                    //presentFragmentAsPreview(fragment);
+                }
+            }
+        }*/
+
         @Override
         public boolean onTouchEvent(MotionEvent event) {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
                 pressed = true;
-                pressedX = event.getX();
-                pressedY = event.getY();
+                //pressedX = event.getX();
+                //pressedY = event.getY();
+
+                if(isSelectable) {
+                    for (int i = 0; i < /*imagesByDays*/cboxesByDays.size(); i++) {
+                        Pair<RectF, PeriodDay> cboxesv = cboxesByDays.valueAt(i);
+                        if (cboxesv.first.contains(event.getX(), event.getY())) {
+                            //if i is
+                            if(selectedDays.contains(Integer.valueOf(i))) {
+                                Log.e("calendar", "startdel set 0");
+                                if(i == Collections.min(selectedDays) || i == Collections.max(selectedDays)) {
+                                    Log.e("calendar", "startdel set 1, val: " + i);
+                                    startDelFromI = i;
+                                    return true;
+                                }
+                            }
+                            break;
+                        }
+                    }
+
+                    startDelFromI = -1;
+                }
             } else if (event.getAction() == MotionEvent.ACTION_UP) {
                 if (pressed) {
-                    for (int i = 0; i < imagesByDays.size(); i++) {
-                        if (imagesByDays.valueAt(i).getDrawRegion().contains(pressedX, pressedY)) {
-                            if (callback != null) {
-                                PeriodDay periodDay = messagesByDays.valueAt(i);
-                                callback.onDateSelected(periodDay.messageObject.getId(), periodDay.startOffset);
-                                finishFragment();
+                    for (int i = 0; i < /*imagesByDays*/cboxesByDays.size(); i++) {
+                        //pressedX, pressedY
+                        Pair<RectF, PeriodDay> cboxesv = cboxesByDays.valueAt(i);
+                        if(cboxesv.first.contains(event.getX(), event.getY())) {
+                            if(isSelectable) {
+                                if(startDelFromI == i && selectedDays.contains(Integer.valueOf(i))) {
+                                    Log.e("calendar", "del check pass, value: " + i);
+                                    selectedDays.remove(Integer.valueOf(i));
+                                    invalidate();
+                                    return true;
+                                }
+
+                                lastTouchedMonth = this;
+
+                                if(!selectedDays.isEmpty()) {
+                                    int smin = Collections.min(selectedDays);
+                                    int smax = Collections.max(selectedDays);
+                                    if (i < (smin - 1)) {
+                                        for (int dxx = i + 1; dxx < smin; ++dxx) {
+                                            if (!selectedDays.contains(dxx)) {
+                                                selectedDays.add(dxx);
+                                            }
+                                        }
+                                    } else if (i > (smax + 1)) {
+                                        for (int dxx = smax + 1; dxx < i; ++dxx) {
+                                            if (!selectedDays.contains(dxx)) {
+                                                selectedDays.add(dxx);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                selectedDays.add(i);
+                                invalidate();
                                 break;
+                            } else {
+                                if (callback != null) {
+                                    PeriodDay periodDay = cboxesv.second;
+                                    if(periodDay != null) {
+                                        callback.onDateSelected(periodDay.messageObject.getId(), periodDay.startOffset);
+                                        finishFragment();
+                                    }
+
+                                    break;
+                                }
                             }
                         }
                     }
                 }
                 pressed = false;
-            } else if (event.getAction() == MotionEvent.ACTION_CANCEL) {
+            }
+            else if(event.getAction() == MotionEvent.ACTION_MOVE) {
+                if(isSelectable) {
+                    if (pressed) {
+                        for (int i = 0; i < /*imagesByDays*/cboxesByDays.size(); i++) {
+                            //keys match, indexes don't
+                            Pair<RectF, PeriodDay> cboxesv = cboxesByDays.valueAt(i);
+                            if(cboxesv.first.contains(event.getX(), event.getY())) {
+                                if(isSelectable) {
+                                    if(lastTouchedI == i) {
+                                        return true;
+                                    }
+                                    lastTouchedI = i;
+
+                                    if(startDelFromI != -1 && selectedDays.contains(Integer.valueOf(i))) {
+                                        selectedDays.remove(Integer.valueOf(i));
+                                        invalidate();
+                                        return true;
+                                    }
+
+                                    lastTouchedMonth = this;
+
+                                    if(!selectedDays.isEmpty()) {
+                                        int smin = Collections.min(selectedDays);
+                                        int smax = Collections.max(selectedDays);
+                                        if (i < (smin - 1)) {
+                                            for (int dxx = i + 1; dxx < smin; ++dxx) {
+                                                if (!selectedDays.contains(dxx)) {
+                                                    selectedDays.add(dxx);
+                                                }
+                                            }
+                                        } else if (i > (smax + 1)) {
+                                            for (int dxx = smax + 1; dxx < i; ++dxx) {
+                                                if (!selectedDays.contains(dxx)) {
+                                                    selectedDays.add(dxx);
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    selectedDays.add(i);
+                                    invalidate();
+                                    break;
+                                } else {
+                                    if (callback != null) {
+                                        PeriodDay periodDay = cboxesv.second;
+                                        if(periodDay != null) {
+                                            callback.onDateSelected(periodDay.messageObject.getId(), periodDay.startOffset);
+                                            finishFragment();
+                                        }
+
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else if (event.getAction() == MotionEvent.ACTION_CANCEL) {
                 pressed = false;
             }
             return pressed;
@@ -501,6 +746,19 @@ public class MediaCalendarActivity extends BaseFragment {
             for (int i = 0; i < daysInMonth; i++) {
                 float cx = xStep * currentColumn + xStep / 2f;
                 float cy = yStep * currentCell + yStep / 2f + AndroidUtilities.dp(44);
+
+                RectF cbox = new RectF(cx - AndroidUtilities.dp(27.5f), cy - AndroidUtilities.dp(44) / 2f, cx + AndroidUtilities.dp(27.5f), cy + AndroidUtilities.dp(44) / 2f);
+                PeriodDay mdd = null;
+                if(messagesByDays != null) {
+                    messagesByDays.get(i, null);
+                }
+                cboxesByDays.put(i, new Pair<RectF, PeriodDay>(cbox, mdd));
+
+                if(selectedDays.contains(i) && !(i == Collections.min(selectedDays) || i == Collections.max(selectedDays))) {
+                    selectorInnerPaint.setColor(ColorUtils.setAlphaComponent(Theme.getColor(Theme.key_checkboxSquareBackground), (int) 59)); //255 full solid
+                    canvas.drawRect(cbox, selectorInnerPaint);
+                }
+
                 int nowTime = (int) (System.currentTimeMillis() / 1000L);
                 if (nowTime < startMonthTime + (i + 1) * 86400) {
                     int oldAlpha = textPaint.getAlpha();
@@ -537,15 +795,40 @@ public class MediaCalendarActivity extends BaseFragment {
                             canvas.scale(s, s,cx, cy);
                         }
                         imagesByDays.get(i).setAlpha(messagesByDays.get(i).enterAlpha);
-                        imagesByDays.get(i).setImageCoords(cx - AndroidUtilities.dp(44) / 2f, cy - AndroidUtilities.dp(44) / 2f, AndroidUtilities.dp(44), AndroidUtilities.dp(44));
+                        float img_m = 44;
+                        if(selectedDays.contains(i)) {
+                            img_m = 38;
+                        }
+                        else {
+                            img_m = 44;
+                        }
+                        imagesByDays.get(i).setImageCoords(cx - AndroidUtilities.dp(img_m) / 2f, cy - AndroidUtilities.dp(img_m) / 2f, AndroidUtilities.dp(img_m), AndroidUtilities.dp(img_m));
                         imagesByDays.get(i).draw(canvas);
                         blackoutPaint.setColor(ColorUtils.setAlphaComponent(Color.BLACK, (int) (messagesByDays.get(i).enterAlpha * 80)));
-                        canvas.drawCircle(cx, cy, AndroidUtilities.dp(44) / 2f, blackoutPaint);
+                        canvas.drawCircle(cx, cy, AndroidUtilities.dp(img_m) / 2f, blackoutPaint);
                         messagesByDays.get(i).wasDrawn = true;
                         if (alpha != 1f) {
                             canvas.restore();
                         }
+                    } else {
+                        if(selectedDays.contains(i)) {
+                            if(i == Collections.min(selectedDays) || i == Collections.max(selectedDays)) {
+                                selectorFPaint.setColor(Theme.getColor(Theme.key_checkboxSquareBackground));
+                                canvas.drawCircle(cx, cy, AndroidUtilities.dp(19), selectorFPaint);
+                            }
+                        }
                     }
+
+                    if(selectedDays.contains(i)) {
+                        if(i == Collections.min(selectedDays) || i == Collections.max(selectedDays)) {
+                            selectorHolPaint.setColor(Theme.getColor(Theme.key_checkboxSquareBackground));
+                            selectorHolPaint.setStyle(Paint.Style.STROKE);
+                            selectorHolPaint.setStrokeWidth(AndroidUtilities.dp(2));
+
+                            canvas.drawCircle(cx, cy, AndroidUtilities.dp(18) + AndroidUtilities.dp(4) * 1, selectorHolPaint);
+                        }
+                    }
+
                     if (alpha != 1f) {
                         int oldAlpha = textPaint.getAlpha();
                         textPaint.setAlpha((int) (oldAlpha * (1f - alpha)));
@@ -561,7 +844,21 @@ public class MediaCalendarActivity extends BaseFragment {
                     }
 
                 } else {
-                    canvas.drawText(Integer.toString(i + 1), cx, cy + AndroidUtilities.dp(5), textPaint);
+                    if(selectedDays.contains(i) && (i == Collections.min(selectedDays) || i == Collections.max(selectedDays))) {
+                        selectorFPaint.setColor(Theme.getColor(Theme.key_checkboxSquareBackground));
+                        canvas.drawCircle(cx, cy, AndroidUtilities.dp(19), selectorFPaint);
+
+                        selectorHolPaint.setColor(Theme.getColor(Theme.key_checkboxSquareBackground));
+                        selectorHolPaint.setStyle(Paint.Style.STROKE);
+                        selectorHolPaint.setStrokeWidth(AndroidUtilities.dp(2));
+
+                        canvas.drawCircle(cx, cy, AndroidUtilities.dp(18) + AndroidUtilities.dp(4) * 1, selectorHolPaint);
+
+                        canvas.drawText(Integer.toString(i + 1), cx, cy + AndroidUtilities.dp(5), activeTextPaint);
+                    }
+                    else {
+                        canvas.drawText(Integer.toString(i + 1), cx, cy + AndroidUtilities.dp(5), textPaint);
+                    }
                 }
 
                 currentColumn++;
@@ -609,6 +906,7 @@ public class MediaCalendarActivity extends BaseFragment {
         float enterAlpha = 1f;
         float startEnterDelay = 1f;
         boolean wasDrawn;
+        //boolean selected = false;
     }
 
     @Override

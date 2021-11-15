@@ -29,6 +29,7 @@ import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.text.TextUtils;
 import android.util.Base64;
+import android.util.Log;
 import android.util.SparseArray;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -466,7 +467,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
     private LocationProvider locationProvider = new LocationProvider(new LocationProvider.LocationProviderDelegate() {
         @Override
         public void onLocationAcquired(Location location) {
-            sendLocation(location);
+            sendLocation(location, null);
             waitingForLocation.clear();
         }
 
@@ -1353,7 +1354,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         }
     }
 
-    public boolean retrySendMessage(MessageObject messageObject, boolean unsent) {
+    public boolean retrySendMessage(MessageObject messageObject, boolean unsent, TLRPC.InputPeer sendAsPeer) {
         if (messageObject.getId() >= 0) {
             if (messageObject.isEditing()) {
                 editMessage(messageObject, null, null, null, null, null, true, messageObject);
@@ -1408,7 +1409,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         if (unsent) {
             unsentMessages.put(messageObject.getId(), messageObject);
         }
-        sendMessage(messageObject);
+        sendMessage(messageObject, sendAsPeer);
         return true;
     }
 
@@ -1420,7 +1421,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         }
     }
 
-    public void processForwardFromMyName(MessageObject messageObject, long did) {
+    public void processForwardFromMyName(MessageObject messageObject, long did, TLRPC.InputPeer sendAsPeer) {
         if (messageObject == null) {
             return;
         }
@@ -1431,22 +1432,22 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                 params.put("parentObject", "sent_" + messageObject.messageOwner.peer_id.channel_id + "_" + messageObject.getId());
             }
             if (messageObject.messageOwner.media.photo instanceof TLRPC.TL_photo) {
-                sendMessage((TLRPC.TL_photo) messageObject.messageOwner.media.photo, null, did, messageObject.replyMessageObject, null, messageObject.messageOwner.message, messageObject.messageOwner.entities, null, params, true, 0, messageObject.messageOwner.media.ttl_seconds, messageObject);
+                sendMessage((TLRPC.TL_photo) messageObject.messageOwner.media.photo, null, did, messageObject.replyMessageObject, null, messageObject.messageOwner.message, messageObject.messageOwner.entities, null, params, true, 0, messageObject.messageOwner.media.ttl_seconds, messageObject, sendAsPeer);
             } else if (messageObject.messageOwner.media.document instanceof TLRPC.TL_document) {
-                sendMessage((TLRPC.TL_document) messageObject.messageOwner.media.document, null, messageObject.messageOwner.attachPath, did, messageObject.replyMessageObject, null, messageObject.messageOwner.message, messageObject.messageOwner.entities, null, params, true, 0, messageObject.messageOwner.media.ttl_seconds, messageObject, null);
+                sendMessage((TLRPC.TL_document) messageObject.messageOwner.media.document, null, messageObject.messageOwner.attachPath, did, messageObject.replyMessageObject, null, messageObject.messageOwner.message, messageObject.messageOwner.entities, null, params, true, 0, messageObject.messageOwner.media.ttl_seconds, messageObject, null, sendAsPeer);
             } else if (messageObject.messageOwner.media instanceof TLRPC.TL_messageMediaVenue || messageObject.messageOwner.media instanceof TLRPC.TL_messageMediaGeo) {
-                sendMessage(messageObject.messageOwner.media, did, messageObject.replyMessageObject, null, null, null, true, 0);
+                sendMessage(messageObject.messageOwner.media, did, messageObject.replyMessageObject, null, null, null, true, 0, sendAsPeer);
             } else if (messageObject.messageOwner.media.phone_number != null) {
                 TLRPC.User user = new TLRPC.TL_userContact_old2();
                 user.phone = messageObject.messageOwner.media.phone_number;
                 user.first_name = messageObject.messageOwner.media.first_name;
                 user.last_name = messageObject.messageOwner.media.last_name;
                 user.id = messageObject.messageOwner.media.user_id;
-                sendMessage(user, did, messageObject.replyMessageObject, null, null, null, true, 0);
+                sendMessage(user, did, messageObject.replyMessageObject, null, null, null, true, 0, sendAsPeer);
             } else if (!DialogObject.isEncryptedDialog(did)) {
                 ArrayList<MessageObject> arrayList = new ArrayList<>();
                 arrayList.add(messageObject);
-                sendMessage(arrayList, did, true, false, true, 0);
+                sendMessage(arrayList, did, true, false, true, 0, sendAsPeer);
             }
         } else if (messageObject.messageOwner.message != null) {
             TLRPC.WebPage webPage = null;
@@ -1469,11 +1470,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
             } else {
                 entities = null;
             }
-            sendMessage(messageObject.messageOwner.message, did, messageObject.replyMessageObject, null, webPage, true, entities, null, null, true, 0, null);
+            sendMessage(messageObject.messageOwner.message, did, messageObject.replyMessageObject, null, webPage, true, entities, null, null, true, 0, null, sendAsPeer);
         } else if (DialogObject.isEncryptedDialog(did)) {
             ArrayList<MessageObject> arrayList = new ArrayList<>();
             arrayList.add(messageObject);
-            sendMessage(arrayList, did, true, false, true, 0);
+            sendMessage(arrayList, did, true, false, true, 0, sendAsPeer);
         }
     }
 
@@ -1526,7 +1527,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         performSendMessageRequest(req, newMsgObj, null, null, null, null, false);
     }
 
-    public void sendSticker(TLRPC.Document document, String query, long peer, MessageObject replyToMsg, MessageObject replyToTopMsg, Object parentObject, MessageObject.SendAnimationData sendAnimationData, boolean notify, int scheduleDate) {
+    public void sendSticker(TLRPC.Document document, String query, long peer, MessageObject replyToMsg, MessageObject replyToTopMsg, Object parentObject, MessageObject.SendAnimationData sendAnimationData, boolean notify, int scheduleDate, TLRPC.InputPeer sendAsPeer) {
         if (document == null) {
             return;
         }
@@ -1616,7 +1617,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                     if (bitmapFinal[0] != null && keyFinal[0] != null) {
                         ImageLoader.getInstance().putImageToCache(new BitmapDrawable(bitmapFinal[0]), keyFinal[0], false);
                     }
-                    sendMessage((TLRPC.TL_document) finalDocument, null, null, peer, replyToMsg, replyToTopMsg, null, null, null, null, notify, scheduleDate, 0, parentObject, sendAnimationData);
+                    sendMessage((TLRPC.TL_document) finalDocument, null, null, peer, replyToMsg, replyToTopMsg, null, null, null, null, notify, scheduleDate, 0, parentObject, sendAnimationData, sendAsPeer);
                 });
             });
         } else {
@@ -1627,11 +1628,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
             } else {
                 params = null;
             }
-            sendMessage((TLRPC.TL_document) finalDocument, null, null, peer, replyToMsg, replyToTopMsg, null, null, null, params, notify, scheduleDate, 0, parentObject, sendAnimationData);
+            sendMessage((TLRPC.TL_document) finalDocument, null, null, peer, replyToMsg, replyToTopMsg, null, null, null, params, notify, scheduleDate, 0, parentObject, sendAnimationData, sendAsPeer);
         }
     }
 
-    public int sendMessage(ArrayList<MessageObject> messages, final long peer, boolean forwardFromMyName, boolean hideCaption, boolean notify, int scheduleDate) {
+    public int sendMessage(ArrayList<MessageObject> messages, final long peer, boolean forwardFromMyName, boolean hideCaption, boolean notify, int scheduleDate, TLRPC.InputPeer sendAsPeer) {
         if (messages == null || messages.isEmpty()) {
             return 0;
         }
@@ -1691,7 +1692,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                 if (msgObj.getId() <= 0 || msgObj.needDrawBluredPreview()) {
                     if (msgObj.type == 0 && !TextUtils.isEmpty(msgObj.messageText)) {
                         TLRPC.WebPage webPage = msgObj.messageOwner.media != null ? msgObj.messageOwner.media.webpage : null;
-                        sendMessage(msgObj.messageText.toString(), peer, null, null, webPage, webPage != null, msgObj.messageOwner.entities, null, null, notify, scheduleDate, null);
+                        sendMessage(msgObj.messageText.toString(), peer, null, null, webPage, webPage != null, msgObj.messageOwner.entities, null, null, notify, scheduleDate, null, sendAsPeer);
                     }
                     continue;
                 }
@@ -1949,6 +1950,10 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                         req.schedule_date = scheduleDate;
                         req.flags |= 1024;
                     }
+                    if(sendAsPeer != null) {
+                        req.send_as = sendAsPeer;
+                        req.flags |= 8192;
+                    }
                     if (msgObj.messageOwner.peer_id instanceof TLRPC.TL_peerChannel) {
                         TLRPC.Chat channel = getMessagesController().getChat(msgObj.messageOwner.peer_id.channel_id);
                         req.from_peer = new TLRPC.TL_inputPeerChannel();
@@ -2111,7 +2116,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
             }
         } else {
             for (int a = 0; a < messages.size(); a++) {
-                processForwardFromMyName(messages.get(a), peer);
+                processForwardFromMyName(messages.get(a), peer, sendAsPeer);
             }
         }
         return sendResult;
@@ -2539,14 +2544,14 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         });
     }
 
-    private void sendLocation(Location location) {
+    private void sendLocation(Location location, TLRPC.InputPeer sendAsPeer) {
         TLRPC.TL_messageMediaGeo mediaGeo = new TLRPC.TL_messageMediaGeo();
         mediaGeo.geo = new TLRPC.TL_geoPoint();
         mediaGeo.geo.lat = AndroidUtilities.fixLocationCoord(location.getLatitude());
         mediaGeo.geo._long = AndroidUtilities.fixLocationCoord(location.getLongitude());
         for (HashMap.Entry<String, MessageObject> entry : waitingForLocation.entrySet()) {
             MessageObject messageObject = entry.getValue();
-            sendMessage(mediaGeo, messageObject.getDialogId(), messageObject, null, null, null, true, 0);
+            sendMessage(mediaGeo, messageObject.getDialogId(), messageObject, null, null, null, true, 0, sendAsPeer);
         }
     }
 
@@ -3042,43 +3047,43 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         });
     }
 
-    public void sendMessage(MessageObject retryMessageObject) {
-        sendMessage(null, null, null, null, null, null, null, null, null, null, retryMessageObject.getDialogId(), retryMessageObject.messageOwner.attachPath, null, null, null, true, retryMessageObject, null, retryMessageObject.messageOwner.reply_markup, retryMessageObject.messageOwner.params, !retryMessageObject.messageOwner.silent, retryMessageObject.scheduled ? retryMessageObject.messageOwner.date : 0, 0, null, null);
+    public void sendMessage(MessageObject retryMessageObject, TLRPC.InputPeer sendAsPeer) {
+        sendMessage(null, null, null, null, null, null, null, null, null, null, retryMessageObject.getDialogId(), retryMessageObject.messageOwner.attachPath, null, null, null, true, retryMessageObject, null, retryMessageObject.messageOwner.reply_markup, retryMessageObject.messageOwner.params, !retryMessageObject.messageOwner.silent, retryMessageObject.scheduled ? retryMessageObject.messageOwner.date : 0, 0, null, null, sendAsPeer);
     }
 
-    public void sendMessage(TLRPC.User user, long peer, MessageObject replyToMsg, MessageObject replyToTopMsg, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate) {
-        sendMessage(null, null, null, null, null, user, null, null, null, null, peer, null, replyToMsg, replyToTopMsg, null, true, null, null, replyMarkup, params, notify, scheduleDate, 0, null, null);
+    public void sendMessage(TLRPC.User user, long peer, MessageObject replyToMsg, MessageObject replyToTopMsg, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate, TLRPC.InputPeer sendAsPeer) {
+        sendMessage(null, null, null, null, null, user, null, null, null, null, peer, null, replyToMsg, replyToTopMsg, null, true, null, null, replyMarkup, params, notify, scheduleDate, 0, null, null, sendAsPeer);
     }
 
-    public void sendMessage(TLRPC.TL_messageMediaInvoice invoice, long peer, MessageObject replyToMsg, MessageObject replyToTopMsg, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate) {
-        sendMessage(null, null, null, null, null, null, null, null, null, invoice, peer, null, replyToMsg, replyToTopMsg, null, true, null, null, replyMarkup, params, notify, scheduleDate, 0, null, null);
+    public void sendMessage(TLRPC.TL_messageMediaInvoice invoice, long peer, MessageObject replyToMsg, MessageObject replyToTopMsg, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate, TLRPC.InputPeer sendAsPeer) {
+        sendMessage(null, null, null, null, null, null, null, null, null, invoice, peer, null, replyToMsg, replyToTopMsg, null, true, null, null, replyMarkup, params, notify, scheduleDate, 0, null, null, sendAsPeer);
     }
 
-    public void sendMessage(TLRPC.TL_document document, VideoEditedInfo videoEditedInfo, String path, long peer, MessageObject replyToMsg, MessageObject replyToTopMsg, String caption, ArrayList<TLRPC.MessageEntity> entities, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate, int ttl, Object parentObject, MessageObject.SendAnimationData sendAnimationData) {
-        sendMessage(null, caption, null, null, videoEditedInfo, null, document, null, null, null, peer, path, replyToMsg, replyToTopMsg, null, true, null, entities, replyMarkup, params, notify, scheduleDate, ttl, parentObject, sendAnimationData);
+    public void sendMessage(TLRPC.TL_document document, VideoEditedInfo videoEditedInfo, String path, long peer, MessageObject replyToMsg, MessageObject replyToTopMsg, String caption, ArrayList<TLRPC.MessageEntity> entities, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate, int ttl, Object parentObject, MessageObject.SendAnimationData sendAnimationData, TLRPC.InputPeer sendAsPeer) {
+        sendMessage(null, caption, null, null, videoEditedInfo, null, document, null, null, null, peer, path, replyToMsg, replyToTopMsg, null, true, null, entities, replyMarkup, params, notify, scheduleDate, ttl, parentObject, sendAnimationData, sendAsPeer);
     }
 
-    public void sendMessage(String message, long peer, MessageObject replyToMsg, MessageObject replyToTopMsg, TLRPC.WebPage webPage, boolean searchLinks, ArrayList<TLRPC.MessageEntity> entities, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate, MessageObject.SendAnimationData sendAnimationData) {
-        sendMessage(message, null, null, null, null, null, null, null, null, null, peer, null, replyToMsg, replyToTopMsg, webPage, searchLinks, null, entities, replyMarkup, params, notify, scheduleDate, 0, null, sendAnimationData);
+    public void sendMessage(String message, long peer, MessageObject replyToMsg, MessageObject replyToTopMsg, TLRPC.WebPage webPage, boolean searchLinks, ArrayList<TLRPC.MessageEntity> entities, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate, MessageObject.SendAnimationData sendAnimationData, TLRPC.InputPeer sendAsPeer) {
+        sendMessage(message, null, null, null, null, null, null, null, null, null, peer, null, replyToMsg, replyToTopMsg, webPage, searchLinks, null, entities, replyMarkup, params, notify, scheduleDate, 0, null, sendAnimationData, sendAsPeer);
     }
 
-    public void sendMessage(TLRPC.MessageMedia location, long peer, MessageObject replyToMsg, MessageObject replyToTopMsg, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate) {
-        sendMessage(null, null, location, null, null, null, null, null, null, null, peer, null, replyToMsg, replyToTopMsg, null, true, null, null, replyMarkup, params, notify, scheduleDate, 0, null, null);
+    public void sendMessage(TLRPC.MessageMedia location, long peer, MessageObject replyToMsg, MessageObject replyToTopMsg, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate, TLRPC.InputPeer sendAsPeer) {
+        sendMessage(null, null, location, null, null, null, null, null, null, null, peer, null, replyToMsg, replyToTopMsg, null, true, null, null, replyMarkup, params, notify, scheduleDate, 0, null, null, sendAsPeer);
     }
 
-    public void sendMessage(TLRPC.TL_messageMediaPoll poll, long peer, MessageObject replyToMsg, MessageObject replyToTopMsg, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate) {
-        sendMessage(null, null, null, null, null, null, null, null, poll, null, peer, null, replyToMsg, replyToTopMsg, null, true, null, null, replyMarkup, params, notify, scheduleDate, 0, null, null);
+    public void sendMessage(TLRPC.TL_messageMediaPoll poll, long peer, MessageObject replyToMsg, MessageObject replyToTopMsg, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate, TLRPC.InputPeer sendAsPeer) {
+        sendMessage(null, null, null, null, null, null, null, null, poll, null, peer, null, replyToMsg, replyToTopMsg, null, true, null, null, replyMarkup, params, notify, scheduleDate, 0, null, null, sendAsPeer);
     }
 
-    public void sendMessage(TLRPC.TL_game game, long peer, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate) {
-        sendMessage(null, null, null, null, null, null, null, game, null, null, peer, null, null, null, null, true, null, null, replyMarkup, params, notify, scheduleDate, 0, null, null);
+    public void sendMessage(TLRPC.TL_game game, long peer, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate, TLRPC.InputPeer sendAsPeer) {
+        sendMessage(null, null, null, null, null, null, null, game, null, null, peer, null, null, null, null, true, null, null, replyMarkup, params, notify, scheduleDate, 0, null, null, sendAsPeer);
     }
 
-    public void sendMessage(TLRPC.TL_photo photo, String path, long peer, MessageObject replyToMsg, MessageObject replyToTopMsg, String caption, ArrayList<TLRPC.MessageEntity> entities, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate, int ttl, Object parentObject) {
-        sendMessage(null, caption, null, photo, null, null, null, null, null, null, peer, path, replyToMsg, replyToTopMsg, null, true, null, entities, replyMarkup, params, notify, scheduleDate, ttl, parentObject, null);
+    public void sendMessage(TLRPC.TL_photo photo, String path, long peer, MessageObject replyToMsg, MessageObject replyToTopMsg, String caption, ArrayList<TLRPC.MessageEntity> entities, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate, int ttl, Object parentObject, TLRPC.InputPeer sendAsPeer) {
+        sendMessage(null, caption, null, photo, null, null, null, null, null, null, peer, path, replyToMsg, replyToTopMsg, null, true, null, entities, replyMarkup, params, notify, scheduleDate, ttl, parentObject, null, sendAsPeer);
     }
 
-    private void sendMessage(String message, String caption, TLRPC.MessageMedia location, TLRPC.TL_photo photo, VideoEditedInfo videoEditedInfo, TLRPC.User user, TLRPC.TL_document document, TLRPC.TL_game game, TLRPC.TL_messageMediaPoll poll, TLRPC.TL_messageMediaInvoice invoice, long peer, String path, MessageObject replyToMsg, MessageObject replyToTopMsg, TLRPC.WebPage webPage, boolean searchLinks, MessageObject retryMessageObject, ArrayList<TLRPC.MessageEntity> entities, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate, int ttl, Object parentObject, MessageObject.SendAnimationData sendAnimationData) {
+    private void sendMessage(String message, String caption, TLRPC.MessageMedia location, TLRPC.TL_photo photo, VideoEditedInfo videoEditedInfo, TLRPC.User user, TLRPC.TL_document document, TLRPC.TL_game game, TLRPC.TL_messageMediaPoll poll, TLRPC.TL_messageMediaInvoice invoice, long peer, String path, MessageObject replyToMsg, MessageObject replyToTopMsg, TLRPC.WebPage webPage, boolean searchLinks, MessageObject retryMessageObject, ArrayList<TLRPC.MessageEntity> entities, TLRPC.ReplyMarkup replyMarkup, HashMap<String, String> params, boolean notify, int scheduleDate, int ttl, Object parentObject, MessageObject.SendAnimationData sendAnimationData, TLRPC.InputPeer sendAsPeer) {
         if (user != null && user.phone == null) {
             return;
         }
@@ -3652,6 +3657,10 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                         reqSend.schedule_date = scheduleDate;
                         reqSend.flags |= 1024;
                     }
+                    if(sendAsPeer != null) {
+                        reqSend.send_as = sendAsPeer;
+                        reqSend.flags |= 8192;
+                    }
                     performSendMessageRequest(reqSend, newMsgObj, null, null, parentObject, params, scheduleDate != 0);
                     if (retryMessageObject == null) {
                         getMediaDataController().cleanDraft(peer, replyToTopMsg != null ? replyToTopMsg.getId() : 0, false);
@@ -3967,6 +3976,10 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                                 request.schedule_date = scheduleDate;
                                 request.flags |= 1024;
                             }
+                            if(sendAsPeer != null) {
+                                request.send_as = sendAsPeer;
+                                request.flags |= 8192;
+                            }
                             delayedMessage.sendRequest = request;
                         }
                         delayedMessage.messageObjects.add(newMsgObj);
@@ -4005,6 +4018,10 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                         if (scheduleDate != 0) {
                             request.schedule_date = scheduleDate;
                             request.flags |= 1024;
+                        }
+                        if(sendAsPeer != null) {
+                            request.send_as = sendAsPeer;
+                            request.flags |= 8192;
                         }
 
                         if (delayedMessage != null) {
@@ -4356,6 +4373,10 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                     reqSend.schedule_date = scheduleDate;
                     reqSend.flags |= 1024;
                 }
+                if(sendAsPeer != null) {
+                    reqSend.send_as = sendAsPeer;
+                    reqSend.flags |= 8192;
+                }
                 reqSend.random_id.add(newMsg.random_id);
                 if (retryMessageObject.getId() >= 0) {
                     reqSend.id.add(retryMessageObject.getId());
@@ -4380,6 +4401,10 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                 if (scheduleDate != 0) {
                     reqSend.schedule_date = scheduleDate;
                     reqSend.flags |= 1024;
+                }
+                if(sendAsPeer != null) {
+                    reqSend.send_as = sendAsPeer;
+                    reqSend.flags |= 8192;
                 }
                 reqSend.query_id = Utilities.parseLong(params.get("query_id"));
                 reqSend.id = params.get("id");
@@ -5776,13 +5801,13 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                         messageObject.messageOwner.params.put("final", "1");
                     }
                 }
-                retrySendMessage(messageObject, true);
+                retrySendMessage(messageObject, true, null);
             }
             if (scheduledMessages != null) {
                 for (int a = 0; a < scheduledMessages.size(); a++) {
                     MessageObject messageObject = new MessageObject(currentAccount, scheduledMessages.get(a), false, true);
                     messageObject.scheduled = true;
-                    retrySendMessage(messageObject, true);
+                    retrySendMessage(messageObject, true, null);
                 }
             }
         });
@@ -5980,7 +6005,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         }
     }
 
-    private static boolean prepareSendingDocumentInternal(AccountInstance accountInstance, String path, String originalPath, Uri uri, String mime, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, CharSequence caption, final ArrayList<TLRPC.MessageEntity> entities, final MessageObject editingMessageObject, long[] groupId, boolean isGroupFinal, boolean forceDocument, boolean notify, int scheduleDate, Integer[] docType) {
+    private static boolean prepareSendingDocumentInternal(AccountInstance accountInstance, String path, String originalPath, Uri uri, String mime, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, CharSequence caption, final ArrayList<TLRPC.MessageEntity> entities, final MessageObject editingMessageObject, long[] groupId, boolean isGroupFinal, boolean forceDocument, boolean notify, int scheduleDate, Integer[] docType, TLRPC.InputPeer sendAsPeer) {
         if ((path == null || path.length() == 0) && uri == null) {
             return false;
         }
@@ -6246,14 +6271,14 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
             if (editingMessageObject != null) {
                 accountInstance.getSendMessagesHelper().editMessage(editingMessageObject, null, null, documentFinal, pathFinal, params, false, parentFinal);
             } else {
-                accountInstance.getSendMessagesHelper().sendMessage(documentFinal, null, pathFinal, dialogId, replyToMsg, replyToTopMsg, captionFinal, entities, null, params, notify, scheduleDate, 0, parentFinal, null);
+                accountInstance.getSendMessagesHelper().sendMessage(documentFinal, null, pathFinal, dialogId, replyToMsg, replyToTopMsg, captionFinal, entities, null, params, notify, scheduleDate, 0, parentFinal, null, sendAsPeer);
             }
         });
         return true;
     }
 
     @UiThread
-    public static void prepareSendingDocument(AccountInstance accountInstance, String path, String originalPath, Uri uri, String caption, String mine, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, InputContentInfoCompat inputContent, MessageObject editingMessageObject, boolean notify, int scheduleDate) {
+    public static void prepareSendingDocument(AccountInstance accountInstance, String path, String originalPath, Uri uri, String caption, String mine, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, InputContentInfoCompat inputContent, MessageObject editingMessageObject, boolean notify, int scheduleDate, TLRPC.InputPeer sendAsPeer) {
         if ((path == null || originalPath == null) && uri == null) {
             return;
         }
@@ -6268,11 +6293,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
             paths.add(path);
             originalPaths.add(originalPath);
         }
-        prepareSendingDocuments(accountInstance, paths, originalPaths, uris, caption, mine, dialogId, replyToMsg, replyToTopMsg, inputContent, editingMessageObject, notify, scheduleDate);
+        prepareSendingDocuments(accountInstance, paths, originalPaths, uris, caption, mine, dialogId, replyToMsg, replyToTopMsg, inputContent, editingMessageObject, notify, scheduleDate, sendAsPeer);
     }
 
     @UiThread
-    public static void prepareSendingAudioDocuments(AccountInstance accountInstance, ArrayList<MessageObject> messageObjects, String caption, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, MessageObject editingMessageObject, boolean notify, int scheduleDate) {
+    public static void prepareSendingAudioDocuments(AccountInstance accountInstance, ArrayList<MessageObject> messageObjects, String caption, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, MessageObject editingMessageObject, boolean notify, int scheduleDate, TLRPC.InputPeer sendAsPeer) {
         new Thread(() -> {
             int count = messageObjects.size();
             long groupId = 0;
@@ -6333,7 +6358,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                     if (editingMessageObject != null) {
                         accountInstance.getSendMessagesHelper().editMessage(editingMessageObject, null, null, documentFinal, messageObject.messageOwner.attachPath, params, false, parentFinal);
                     } else {
-                        accountInstance.getSendMessagesHelper().sendMessage(documentFinal, null, messageObject.messageOwner.attachPath, dialogId, replyToMsg, replyToTopMsg, captionFinal, null, null, params, notify, scheduleDate, 0, parentFinal, null);
+                        accountInstance.getSendMessagesHelper().sendMessage(documentFinal, null, messageObject.messageOwner.attachPath, dialogId, replyToMsg, replyToTopMsg, captionFinal, null, null, params, notify, scheduleDate, 0, parentFinal, null, sendAsPeer);
                     }
                 });
             }
@@ -6361,7 +6386,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
     }
 
     @UiThread
-    public static void prepareSendingDocuments(AccountInstance accountInstance, ArrayList<String> paths, ArrayList<String> originalPaths, ArrayList<Uri> uris, String caption, String mime, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, InputContentInfoCompat inputContent, MessageObject editingMessageObject, boolean notify, int scheduleDate) {
+    public static void prepareSendingDocuments(AccountInstance accountInstance, ArrayList<String> paths, ArrayList<String> originalPaths, ArrayList<Uri> uris, String caption, String mime, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, InputContentInfoCompat inputContent, MessageObject editingMessageObject, boolean notify, int scheduleDate, TLRPC.InputPeer sendAsPeer) {
         if (paths == null && originalPaths == null && uris == null || paths != null && originalPaths != null && paths.size() != originalPaths.size()) {
             return;
         }
@@ -6386,7 +6411,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                     }
                     mediaCount++;
                     long prevGroupId = groupId[0];
-                    if (!prepareSendingDocumentInternal(accountInstance, paths.get(a), originalPaths.get(a), null, mime, dialogId, replyToMsg, replyToTopMsg, captionFinal, null, editingMessageObject, groupId, mediaCount == 10 || a == count - 1, inputContent == null, notify, scheduleDate, docType)) {
+                    if (!prepareSendingDocumentInternal(accountInstance, paths.get(a), originalPaths.get(a), null, mime, dialogId, replyToMsg, replyToTopMsg, captionFinal, null, editingMessageObject, groupId, mediaCount == 10 || a == count - 1, inputContent == null, notify, scheduleDate, docType, sendAsPeer)) {
                         error = true;
                     }
                     if (prevGroupId != groupId[0] || groupId[0] == -1) {
@@ -6409,7 +6434,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                     }
                     mediaCount++;
                     long prevGroupId = groupId[0];
-                    if (!prepareSendingDocumentInternal(accountInstance, null, null, uris.get(a), mime, dialogId, replyToMsg, replyToTopMsg, captionFinal, null, editingMessageObject, groupId, mediaCount == 10 || a == count - 1, inputContent == null, notify, scheduleDate, docType)) {
+                    if (!prepareSendingDocumentInternal(accountInstance, null, null, uris.get(a), mime, dialogId, replyToMsg, replyToTopMsg, captionFinal, null, editingMessageObject, groupId, mediaCount == 10 || a == count - 1, inputContent == null, notify, scheduleDate, docType, sendAsPeer)) {
                         error = true;
                     }
                     if (prevGroupId != groupId[0] || groupId[0] == -1) {
@@ -6433,12 +6458,12 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
     }
 
     @UiThread
-    public static void prepareSendingPhoto(AccountInstance accountInstance, String imageFilePath, Uri imageUri, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, CharSequence caption, ArrayList<TLRPC.MessageEntity> entities, ArrayList<TLRPC.InputDocument> stickers, InputContentInfoCompat inputContent, int ttl, MessageObject editingMessageObject, boolean notify, int scheduleDate) {
-        prepareSendingPhoto(accountInstance, imageFilePath, null, imageUri, dialogId, replyToMsg, replyToTopMsg, caption, entities, stickers, inputContent, ttl, editingMessageObject, null, notify, scheduleDate, false);
+    public static void prepareSendingPhoto(AccountInstance accountInstance, String imageFilePath, Uri imageUri, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, CharSequence caption, ArrayList<TLRPC.MessageEntity> entities, ArrayList<TLRPC.InputDocument> stickers, InputContentInfoCompat inputContent, int ttl, MessageObject editingMessageObject, boolean notify, int scheduleDate, TLRPC.InputPeer sendAsPeer) {
+        prepareSendingPhoto(accountInstance, imageFilePath, null, imageUri, dialogId, replyToMsg, replyToTopMsg, caption, entities, stickers, inputContent, ttl, editingMessageObject, null, notify, scheduleDate, false, sendAsPeer);
     }
 
     @UiThread
-    public static void prepareSendingPhoto(AccountInstance accountInstance, String imageFilePath, String thumbFilePath, Uri imageUri, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, CharSequence caption, ArrayList<TLRPC.MessageEntity> entities, ArrayList<TLRPC.InputDocument> stickers, InputContentInfoCompat inputContent, int ttl, MessageObject editingMessageObject, VideoEditedInfo videoEditedInfo, boolean notify, int scheduleDate, boolean forceDocument) {
+    public static void prepareSendingPhoto(AccountInstance accountInstance, String imageFilePath, String thumbFilePath, Uri imageUri, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, CharSequence caption, ArrayList<TLRPC.MessageEntity> entities, ArrayList<TLRPC.InputDocument> stickers, InputContentInfoCompat inputContent, int ttl, MessageObject editingMessageObject, VideoEditedInfo videoEditedInfo, boolean notify, int scheduleDate, boolean forceDocument, TLRPC.InputPeer sendAsPeer) {
         SendingMediaInfo info = new SendingMediaInfo();
         info.path = imageFilePath;
         info.thumbPath = thumbFilePath;
@@ -6454,11 +6479,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         info.videoEditedInfo = videoEditedInfo;
         ArrayList<SendingMediaInfo> infos = new ArrayList<>();
         infos.add(info);
-        prepareSendingMedia(accountInstance, infos, dialogId, replyToMsg, replyToTopMsg, inputContent, forceDocument, false, editingMessageObject, notify, scheduleDate);
+        prepareSendingMedia(accountInstance, infos, dialogId, replyToMsg, replyToTopMsg, inputContent, forceDocument, false, editingMessageObject, notify, scheduleDate, sendAsPeer);
     }
 
     @UiThread
-    public static void prepareSendingBotContextResult(AccountInstance accountInstance, TLRPC.BotInlineResult result, HashMap<String, String> params, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, boolean notify, int scheduleDate) {
+    public static void prepareSendingBotContextResult(AccountInstance accountInstance, TLRPC.BotInlineResult result, HashMap<String, String> params, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, boolean notify, int scheduleDate, TLRPC.InputPeer sendAsPeer) {
         if (result == null) {
             return;
         }
@@ -6719,11 +6744,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                         if (precahcedThumb[0] != null && precachedKey[0] != null) {
                             ImageLoader.getInstance().putImageToCache(new BitmapDrawable(precahcedThumb[0]), precachedKey[0], false);
                         }
-                        accountInstance.getSendMessagesHelper().sendMessage(finalDocument, null, finalPathFinal, dialogId, replyToMsg, replyToTopMsg, result.send_message.message, result.send_message.entities, result.send_message.reply_markup, params, notify, scheduleDate, 0, result, null);
+                        accountInstance.getSendMessagesHelper().sendMessage(finalDocument, null, finalPathFinal, dialogId, replyToMsg, replyToTopMsg, result.send_message.message, result.send_message.entities, result.send_message.reply_markup, params, notify, scheduleDate, 0, result, null, sendAsPeer);
                     } else if (finalPhoto != null) {
-                        accountInstance.getSendMessagesHelper().sendMessage(finalPhoto, result.content != null ? result.content.url : null, dialogId, replyToMsg, replyToTopMsg, result.send_message.message, result.send_message.entities, result.send_message.reply_markup, params, notify, scheduleDate, 0, result);
+                        accountInstance.getSendMessagesHelper().sendMessage(finalPhoto, result.content != null ? result.content.url : null, dialogId, replyToMsg, replyToTopMsg, result.send_message.message, result.send_message.entities, result.send_message.reply_markup, params, notify, scheduleDate, 0, result, sendAsPeer);
                     } else if (finalGame != null) {
-                        accountInstance.getSendMessagesHelper().sendMessage(finalGame, dialogId, result.send_message.reply_markup, params, notify, scheduleDate);
+                        accountInstance.getSendMessagesHelper().sendMessage(finalGame, dialogId, result.send_message.reply_markup, params, notify, scheduleDate, sendAsPeer);
                     }
                 });
             }).run();
@@ -6739,7 +6764,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                     }
                 }
             }
-            accountInstance.getSendMessagesHelper().sendMessage(result.send_message.message, dialogId, replyToMsg, replyToTopMsg, webPage, !result.send_message.no_webpage, result.send_message.entities, result.send_message.reply_markup, params, notify, scheduleDate, null);
+            accountInstance.getSendMessagesHelper().sendMessage(result.send_message.message, dialogId, replyToMsg, replyToTopMsg, webPage, !result.send_message.no_webpage, result.send_message.entities, result.send_message.reply_markup, params, notify, scheduleDate, null, sendAsPeer);
         } else if (result.send_message instanceof TLRPC.TL_botInlineMessageMediaVenue) {
             TLRPC.TL_messageMediaVenue venue = new TLRPC.TL_messageMediaVenue();
             venue.geo = result.send_message.geo;
@@ -6751,7 +6776,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
             if (venue.venue_type == null) {
                 venue.venue_type = "";
             }
-            accountInstance.getSendMessagesHelper().sendMessage(venue, dialogId, replyToMsg, replyToTopMsg, result.send_message.reply_markup, params, notify, scheduleDate);
+            accountInstance.getSendMessagesHelper().sendMessage(venue, dialogId, replyToMsg, replyToTopMsg, result.send_message.reply_markup, params, notify, scheduleDate, sendAsPeer);
         } else if (result.send_message instanceof TLRPC.TL_botInlineMessageMediaGeo) {
             if (result.send_message.period != 0 || result.send_message.proximity_notification_radius != 0) {
                 TLRPC.TL_messageMediaGeoLive location = new TLRPC.TL_messageMediaGeoLive();
@@ -6759,12 +6784,12 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                 location.geo = result.send_message.geo;
                 location.heading = result.send_message.heading;
                 location.proximity_notification_radius = result.send_message.proximity_notification_radius;
-                accountInstance.getSendMessagesHelper().sendMessage(location, dialogId, replyToMsg, replyToTopMsg, result.send_message.reply_markup, params, notify, scheduleDate);
+                accountInstance.getSendMessagesHelper().sendMessage(location, dialogId, replyToMsg, replyToTopMsg, result.send_message.reply_markup, params, notify, scheduleDate, sendAsPeer);
             } else {
                 TLRPC.TL_messageMediaGeo location = new TLRPC.TL_messageMediaGeo();
                 location.geo = result.send_message.geo;
                 location.heading = result.send_message.heading;
-                accountInstance.getSendMessagesHelper().sendMessage(location, dialogId, replyToMsg, replyToTopMsg, result.send_message.reply_markup, params, notify, scheduleDate);
+                accountInstance.getSendMessagesHelper().sendMessage(location, dialogId, replyToMsg, replyToTopMsg, result.send_message.reply_markup, params, notify, scheduleDate, sendAsPeer);
             }
         } else if (result.send_message instanceof TLRPC.TL_botInlineMessageMediaContact) {
             TLRPC.User user = new TLRPC.TL_user();
@@ -6776,7 +6801,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
             reason.platform = "";
             reason.reason = "";
             user.restriction_reason.add(reason);
-            accountInstance.getSendMessagesHelper().sendMessage(user, dialogId, replyToMsg, replyToTopMsg, result.send_message.reply_markup, params, notify, scheduleDate);
+            accountInstance.getSendMessagesHelper().sendMessage(user, dialogId, replyToMsg, replyToTopMsg, result.send_message.reply_markup, params, notify, scheduleDate, sendAsPeer);
         } else if (result.send_message instanceof TLRPC.TL_botInlineMessageMediaInvoice) {
             if (DialogObject.isEncryptedDialog(dialogId)) {
                 return; //doesn't work in secret chats for now
@@ -6794,7 +6819,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
             messageMediaInvoice.currency = invoice.currency;
             messageMediaInvoice.total_amount = invoice.total_amount;
             messageMediaInvoice.start_param = "";
-            accountInstance.getSendMessagesHelper().sendMessage(messageMediaInvoice, dialogId, replyToMsg, replyToTopMsg, result.send_message.reply_markup, params, notify, scheduleDate);
+            accountInstance.getSendMessagesHelper().sendMessage(messageMediaInvoice, dialogId, replyToMsg, replyToTopMsg, result.send_message.reply_markup, params, notify, scheduleDate, sendAsPeer);
         }
     }
 
@@ -6813,14 +6838,14 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
     }
 
     @UiThread
-    public static void prepareSendingText(AccountInstance accountInstance, String text, long dialogId, boolean notify, int scheduleDate) {
+    public static void prepareSendingText(AccountInstance accountInstance, String text, long dialogId, boolean notify, int scheduleDate, TLRPC.InputPeer sendAsPeer) {
         accountInstance.getMessagesStorage().getStorageQueue().postRunnable(() -> Utilities.stageQueue.postRunnable(() -> AndroidUtilities.runOnUIThread(() -> {
             String textFinal = getTrimmedString(text);
             if (textFinal.length() != 0) {
                 int count = (int) Math.ceil(textFinal.length() / 4096.0f);
                 for (int a = 0; a < count; a++) {
                     String mess = textFinal.substring(a * 4096, Math.min((a + 1) * 4096, textFinal.length()));
-                    accountInstance.getSendMessagesHelper().sendMessage(mess, dialogId, null, null, null, true, null, null, null, notify, scheduleDate, null);
+                    accountInstance.getSendMessagesHelper().sendMessage(mess, dialogId, null, null, null, true, null, null, null, notify, scheduleDate, null, sendAsPeer);
                 }
             }
         })));
@@ -6953,7 +6978,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
     }
 
     @UiThread
-    public static void prepareSendingMedia(AccountInstance accountInstance, ArrayList<SendingMediaInfo> media, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, InputContentInfoCompat inputContent, boolean forceDocument, boolean groupMedia, MessageObject editingMessageObject, boolean notify, int scheduleDate) {
+    public static void prepareSendingMedia(AccountInstance accountInstance, ArrayList<SendingMediaInfo> media, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, InputContentInfoCompat inputContent, boolean forceDocument, boolean groupMedia, MessageObject editingMessageObject, boolean notify, int scheduleDate, TLRPC.InputPeer sendAsPeer) {
         if (media.isEmpty()) {
             return;
         }
@@ -7157,7 +7182,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                             if (editingMessageObject != null) {
                                 accountInstance.getSendMessagesHelper().editMessage(editingMessageObject, null, null, documentFinal, pathFinal, params, false, parentFinal);
                             } else {
-                                accountInstance.getSendMessagesHelper().sendMessage(documentFinal, null, pathFinal, dialogId, replyToMsg, replyToTopMsg, info.caption, info.entities, null, params, notify, scheduleDate, 0, parentFinal, null);
+                                accountInstance.getSendMessagesHelper().sendMessage(documentFinal, null, pathFinal, dialogId, replyToMsg, replyToTopMsg, info.caption, info.entities, null, params, notify, scheduleDate, 0, parentFinal, null, sendAsPeer);
                             }
                         });
                     } else {
@@ -7228,7 +7253,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                                 if (editingMessageObject != null) {
                                     accountInstance.getSendMessagesHelper().editMessage(editingMessageObject, photoFinal, null, null, needDownloadHttpFinal ? info.searchImage.imageUrl : null, params, false, parentFinal);
                                 } else {
-                                    accountInstance.getSendMessagesHelper().sendMessage(photoFinal, needDownloadHttpFinal ? info.searchImage.imageUrl : null, dialogId, replyToMsg, replyToTopMsg, info.caption, info.entities, null, params, notify, scheduleDate, info.ttl, parentFinal);
+                                    accountInstance.getSendMessagesHelper().sendMessage(photoFinal, needDownloadHttpFinal ? info.searchImage.imageUrl : null, dialogId, replyToMsg, replyToTopMsg, info.caption, info.entities, null, params, notify, scheduleDate, info.ttl, parentFinal, sendAsPeer);
                                 }
                             });
                         }
@@ -7400,7 +7425,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                                 if (editingMessageObject != null) {
                                     accountInstance.getSendMessagesHelper().editMessage(editingMessageObject, null, videoEditedInfo, videoFinal, finalPath, params, false, parentFinal);
                                 } else {
-                                    accountInstance.getSendMessagesHelper().sendMessage(videoFinal, videoEditedInfo, finalPath, dialogId, replyToMsg, replyToTopMsg, info.caption, info.entities, null, params, notify, scheduleDate, info.ttl, parentFinal, null);
+                                    accountInstance.getSendMessagesHelper().sendMessage(videoFinal, videoEditedInfo, finalPath, dialogId, replyToMsg, replyToTopMsg, info.caption, info.entities, null, params, notify, scheduleDate, info.ttl, parentFinal, null, sendAsPeer);
                                 }
                             });
                         } else {
@@ -7597,7 +7622,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                                     if (editingMessageObject != null) {
                                         accountInstance.getSendMessagesHelper().editMessage(editingMessageObject, photoFinal, null, null, null, params, false, parentFinal);
                                     } else {
-                                        accountInstance.getSendMessagesHelper().sendMessage(photoFinal, null, dialogId, replyToMsg, replyToTopMsg, info.caption, info.entities, null, params, notify, scheduleDate, info.ttl, parentFinal);
+                                        accountInstance.getSendMessagesHelper().sendMessage(photoFinal, null, dialogId, replyToMsg, replyToTopMsg, info.caption, info.entities, null, params, notify, scheduleDate, info.ttl, parentFinal, sendAsPeer);
                                     }
                                 });
                             } else {
@@ -7633,7 +7658,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                         mediaCount = 0;
                     }
                     mediaCount++;
-                    prepareSendingDocumentInternal(accountInstance, sendAsDocuments.get(a), sendAsDocumentsOriginal.get(a), sendAsDocumentsUri.get(a), extension, dialogId, replyToMsg, replyToTopMsg, sendAsDocumentsCaptions.get(a), sendAsDocumentsEntities.get(a), editingMessageObject, groupId2, mediaCount == 10 || a == documentsCount - 1, forceDocument, notify, scheduleDate, null);
+                    prepareSendingDocumentInternal(accountInstance, sendAsDocuments.get(a), sendAsDocumentsOriginal.get(a), sendAsDocumentsUri.get(a), extension, dialogId, replyToMsg, replyToTopMsg, sendAsDocumentsCaptions.get(a), sendAsDocumentsEntities.get(a), editingMessageObject, groupId2, mediaCount == 10 || a == documentsCount - 1, forceDocument, notify, scheduleDate, null, sendAsPeer);
                 }
             }
             if (BuildVars.LOGS_ENABLED) {
@@ -7893,7 +7918,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
     }
 
     @UiThread
-    public static void prepareSendingVideo(AccountInstance accountInstance, String videoPath, VideoEditedInfo info, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, CharSequence caption, ArrayList<TLRPC.MessageEntity> entities, int ttl, MessageObject editingMessageObject, boolean notify, int scheduleDate, boolean forceDocument) {
+    public static void prepareSendingVideo(AccountInstance accountInstance, String videoPath, VideoEditedInfo info, long dialogId, MessageObject replyToMsg, MessageObject replyToTopMsg, CharSequence caption, ArrayList<TLRPC.MessageEntity> entities, int ttl, MessageObject editingMessageObject, boolean notify, int scheduleDate, boolean forceDocument, TLRPC.InputPeer sendAsPeer) {
         if (videoPath == null || videoPath.length() == 0) {
             return;
         }
@@ -8040,11 +8065,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                     if (editingMessageObject != null) {
                         accountInstance.getSendMessagesHelper().editMessage(editingMessageObject, null, videoEditedInfo, videoFinal, finalPath, params, false, parentFinal);
                     } else {
-                        accountInstance.getSendMessagesHelper().sendMessage(videoFinal, videoEditedInfo, finalPath, dialogId, replyToMsg, replyToTopMsg, captionFinal, entities, null, params, notify, scheduleDate, ttl, parentFinal, null);
+                        accountInstance.getSendMessagesHelper().sendMessage(videoFinal, videoEditedInfo, finalPath, dialogId, replyToMsg, replyToTopMsg, captionFinal, entities, null, params, notify, scheduleDate, ttl, parentFinal, null, sendAsPeer);
                     }
                 });
             } else {
-                prepareSendingDocumentInternal(accountInstance, videoPath, videoPath, null, null, dialogId, replyToMsg, replyToTopMsg, caption, entities, editingMessageObject, null, false, forceDocument, notify, scheduleDate, null);
+                prepareSendingDocumentInternal(accountInstance, videoPath, videoPath, null, null, dialogId, replyToMsg, replyToTopMsg, caption, entities, editingMessageObject, null, false, forceDocument, notify, scheduleDate, null, sendAsPeer);
             }
         }).start();
     }

@@ -234,6 +234,9 @@ public class AlertsCreator {
                 case "SCHEDULE_TOO_MUCH":
                     showSimpleToast(fragment, LocaleController.getString("MessageScheduledLimitReached", R.string.MessageScheduledLimitReached));
                     break;
+                case "CHAT_FORWARDS_RESTRICTED":
+                    showSimpleToast(fragment, LocaleController.getString("ForwardsRestrictedError", R.string.ForwardsRestrictedError));
+                    break;
             }
         } else if (request instanceof TLRPC.TL_messages_importChatInvite) {
             if (error.text.startsWith("FLOOD_WAIT")) {
@@ -3970,6 +3973,37 @@ public class AlertsCreator {
     public interface PaymentAlertDelegate {
         void didPressedNewCard();
     }
+
+    /*public static void createCalendarDeleteAlert(BaseFragment fragment, int daysSelected, Runnable onDelete, Theme.ResourcesProvider resourcesProvider) {
+        if(fragment == null) {
+            return;
+        }
+
+        final boolean[] deleteForAll = new boolean[1];
+        Activity activity = fragment.getParentActivity();
+        if (activity == null) {
+            return;
+        }
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, resourcesProvider);
+
+        FrameLayout frameLayout = new FrameLayout(activity);
+        CheckBoxCell cell = new CheckBoxCell(activity, 1, resourcesProvider);
+        cell.setBackgroundDrawable(Theme.getSelectorDrawable(false));
+        if (canDeleteInbox) {
+            cell.setText(LocaleController.formatString("DeleteMessagesOptionAlso", R.string.DeleteMessagesOptionAlso, UserObject.getFirstName(user)), "", false, false);
+        }
+        cell.setPadding(LocaleController.isRTL ? AndroidUtilities.dp(16) : AndroidUtilities.dp(8), 0, LocaleController.isRTL ? AndroidUtilities.dp(8) : AndroidUtilities.dp(16), 0);
+        frameLayout.addView(cell, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.TOP | Gravity.LEFT, 0, 0, 0, 0));
+        cell.setOnClickListener(v -> {
+            CheckBoxCell cell1 = (CheckBoxCell) v;
+            deleteForAll[0] = !deleteForAll[0];
+            cell1.setChecked(deleteForAll[0], true);
+        });
+        builder.setView(frameLayout);
+        builder.setCustomViewOffset(9);
+        builder.setMessage(LocaleController.getString("AreYouSureDeleteFewMessages", R.string.AreYouSureDeleteFewMessages));
+        builder.setTitle("Delete messages");
+    }*/
 
     public static void createDeleteMessagesAlert(BaseFragment fragment, TLRPC.User user, TLRPC.Chat chat, TLRPC.EncryptedChat encryptedChat, TLRPC.ChatFull chatInfo, long mergeDialogId, MessageObject selectedMessage, SparseArray<MessageObject>[] selectedMessages, MessageObject.GroupedMessages selectedGroup, boolean scheduled, int loadParticipant, Runnable onDelete, Theme.ResourcesProvider resourcesProvider) {
         if (fragment == null || user == null && chat == null && encryptedChat == null) {

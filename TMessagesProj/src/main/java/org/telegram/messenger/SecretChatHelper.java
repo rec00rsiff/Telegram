@@ -1432,7 +1432,7 @@ public class SecretChatHelper extends BaseController {
                         TLRPC.Message message = messages.get(a);
                         MessageObject messageObject = new MessageObject(currentAccount, message, false, true);
                         messageObject.resendAsIs = true;
-                        getSendMessagesHelper().retrySendMessage(messageObject, true);
+                        getSendMessagesHelper().retrySendMessage(messageObject, true, null);
                     }
                 });
 
