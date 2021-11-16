@@ -750,7 +750,7 @@ public class MediaCalendarActivity extends BaseFragment {
                 RectF cbox = new RectF(cx - AndroidUtilities.dp(27.5f), cy - AndroidUtilities.dp(44) / 2f, cx + AndroidUtilities.dp(27.5f), cy + AndroidUtilities.dp(44) / 2f);
                 PeriodDay mdd = null;
                 if(messagesByDays != null) {
-                    messagesByDays.get(i, null);
+                    mdd = messagesByDays.get(i, null);
                 }
                 cboxesByDays.put(i, new Pair<RectF, PeriodDay>(cbox, mdd));
 
